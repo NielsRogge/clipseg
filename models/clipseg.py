@@ -180,6 +180,9 @@ class CLIPDenseBase(nn.Module):
 
             x = self.model.ln_pre(x)
 
+            # print("Shape of hidden states before Transformer encoder:", x.shape)
+            # print("First values of hidden states before Transformer encoder:", x[0,:3,:3])
+
             x = x.permute(1, 0, 2)  # NLD -> LND
 
             activations, affinities = [], []
@@ -215,9 +218,15 @@ class CLIPDenseBase(nn.Module):
             x = x.permute(1, 0, 2)  # LND -> NLD
             x = self.model.ln_post(x[:, 0, :])
 
+            # print("Shape of pooled output:", x.shape)
+            # print("First values of pooled output:", x[0,:3])
+
             if self.model.proj is not None:
                 x = x @ self.model.proj
 
+                # print("Shape of final output:", x.shape)
+                # print("First values of final output:", x[0,:3])
+            
             return x, activations, affinities
 
     def sample_prompts(self, words, prompt_list=None):
@@ -258,6 +267,11 @@ class CLIPDenseBase(nn.Module):
 
         if type(conditional) in {list, tuple}:
             text_tokens = clip.tokenize(conditional).to(dev)
+            
+            # TODO remove
+            # we hardcode the text tokens here
+            text_tokens = torch.tensor([[1, 2] + [9] * 75]).repeat(4, 1)
+
             cond = self.clip_model.encode_text(text_tokens)
         else:
             if conditional in self.precomputed_prompts:
@@ -388,6 +402,9 @@ class CLIPDensePredT(CLIPDenseBase):
 
         cond = self.get_cond_vec(conditional, bs)
 
+        # TODO remove!!
+        # cond = torch.tensor([[1,2]]).repeat(4,1,1,1)
+
         visual_q, activations, _ = self.visual_forward(x_inp, extract_layers=[0] + list(self.extract_layers))
 
         activation1 = activations[0]
@@ -398,18 +415,28 @@ class CLIPDensePredT(CLIPDenseBase):
         a = None
         for i, (activation, block, reduce) in enumerate(zip(_activations, self.blocks, self.reduces)):
             
+            # if i == 0:
+            #     print("Shape of activation:", activation.shape)
+            #     print("First values of activation:", activation[:3,0,:3])
+            
             if a is not None:
                 a = reduce(activation) + a
             else:
                 a = reduce(activation)
 
+            # if i == 0:
+            #     print("Activation after reduce:", a.shape)
+            #     print("First values of activation after reduce:", a[:3,0,:3])
+
             if i == self.cond_layer:
                 if self.reduce_cond is not None:
                     cond = self.reduce_cond(cond)
-                
-                a = self.film_mul(cond) * a + self.film_add(cond)
 
-            a = block(a)
+                a = self.film_mul(cond) * a + self.film_add(cond)
+            
+            print(f"Activation before layer {i}:", a[:3,0,:3])
+            a = block(a, print_values=False)
+            print(f"Activation after layer {i}:", a[:3,0,:3])
 
         for block in self.extra_blocks:
             a = a + block(a)
