@@ -147,7 +147,12 @@ class CLIPDenseBase(nn.Module):
     def rescaled_pos_emb(self, new_size):
         assert len(new_size) == 2
 
+        print("New size:", new_size)
+        print("Token shape:", self.token_shape)
+    
         a = self.model.positional_embedding[1:].T.view(1, 768, *self.token_shape)
+        print("Shape of a:", a.shape)
+        print("First values of a:", a[0,0,:3,:3])
         b = nnf.interpolate(a, new_size, mode='bicubic', align_corners=False).squeeze(0).view(768, new_size[0]*new_size[1]).T
         return torch.cat([self.model.positional_embedding[:1], b])
 
@@ -175,6 +180,10 @@ class CLIPDenseBase(nn.Module):
             if x.shape[1] != standard_n_tokens:
                 new_shape = int(math.sqrt(x.shape[1]-1))
                 x = x + self.rescaled_pos_emb((new_shape, new_shape)).to(x.dtype)[None,:,:]
+
+                print("Shape of final embeddings:", x.shape)
+                print("First values of final embeddings:", x[0, :3, :3])
+
             else:
                 x = x + self.model.positional_embedding.to(x.dtype)
 
